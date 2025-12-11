@@ -1,5 +1,5 @@
 {
-  "name": "pactometro",
+  "name": "pactometro-vot-abalos",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "gh-pages": "^6.3.0",
     "svelte": "^5.39.6",
     "vite": "^7.1.7"
   }

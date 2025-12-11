@@ -38,26 +38,29 @@
   $: isMobile = hostWidth <= 480;
   $: baseRadius = isMobile ? 70 : 80;
   $: baseThickness = isMobile ? 40 : 40;
+
   $: scale = autoScale ? clamp(hostWidth / referenceWidthPx, minScale, maxScale) : 1;
   $: radius = baseRadius * scale;
   $: thickness = Math.max(8, Math.round(baseThickness * scale));
 
-  const MOBILE_TOP_MARGIN = 30;
+  // Posición vertical y viewBox con acolchado extra (evita recortes en WordPress)
+  $: MOBILE_TOP_MARGIN = isMobile ? clamp(10 + thickness * 0.45, 18, 54) : 30;
   $: cy = isMobile
     ? clamp(radius + MOBILE_TOP_MARGIN, 70, 98)
     : clamp(baseCy + (scale - 1) * 4, 88, 98);
 
-  $: overshootArc = Math.max(0, radius + thickness / 2 - cy);
+  $: overshootArc  = Math.max(0, radius + thickness / 2 - cy);
   $: overshootTick = Math.max(0, radius + thickness * 0.1 - cy);
-  $: vbPadTop = Math.ceil(Math.max(overshootArc, overshootTick) + 3);
+  $: VB_SAFETY = isMobile ? 6 : 4;
+  $: vbPadTop = Math.ceil(Math.max(overshootArc, overshootTick) + VB_SAFETY);
 
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
 
   // === Cálculos del hemiciclo ===
   $: total = parties.reduce((a, p) => a + (p.seats || 0), 0);
-  $: maj = 176;
-  const polar = (a, r) => ({ x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) });
+  $: maj = 175; // o usa: majority ?? (Math.floor(total/2)+1)
 
+  const polar = (a, r) => ({ x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) });
   function arcPath(aStart, aEnd, r = radius) {
     const p1 = polar(aStart, r);
     const p2 = polar(aEnd, r);
@@ -83,6 +86,7 @@
     .filter(p => selectedIds.has(p.id))
     .reduce((a, p) => a + (p.seats || 0), 0);
   $: reachMaj = selectedTotal >= maj;
+
   const selectedTween = tweened(0, { duration: 220, easing: cubicOut });
   $: selectedTween.set(selectedTotal);
 
@@ -93,7 +97,7 @@
       .map((p) => {
         const s = p.seats || 0;
         const startAngle = total ? Math.PI * (1 - acc / total) : Math.PI;
-        const endAngle = total ? Math.PI * (1 - (acc + s) / total) : 0;
+        const endAngle   = total ? Math.PI * (1 - (acc + s) / total) : 0;
         acc += s;
         return { ...p, startAngle, endAngle };
       });
@@ -145,18 +149,41 @@
   </header>
 
   <div class="viz" class:reached={reachMaj}>
-    <svg viewBox={`0 ${-vbPadTop} 100 ${100 + vbPadTop}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hemiciclo">
-      <path d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`} fill="none" class="base" stroke-width={thickness} />
+    <svg
+      viewBox={`0 ${-vbPadTop} 100 ${100 + vbPadTop}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label="Hemiciclo"
+    >
+      <path
+        d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
+        fill="none"
+        class="base"
+        stroke-width={thickness}
+      />
       {#each selectedSegments as seg (seg.id)}
         {#if seg.startAngle > seg.endAngle}
-          <path d={arcPath(seg.startAngle, seg.endAngle, radius)} fill="none" stroke={seg.color} stroke-width={thickness} use:draw={{ duration: 420 }}>
+          <path
+            d={arcPath(seg.startAngle, seg.endAngle, radius)}
+            fill="none"
+            stroke={seg.color}
+            stroke-width={thickness}
+            use:draw={{ duration: 420 }}
+          >
             <title>{seg.name} · {seg.seats} escaños</title>
           </path>
         {/if}
       {/each}
       {#if total > 0}
         <line x1={tick.x1} y1={tick.y1} x2={tick.x2} y2={tick.y2} class="maj" />
-        <text x={labelX} y={labelY} text-anchor="start" dominant-baseline="middle" class="majtxt strong" style="font-size:{labelFontSize}px">
+        <text
+          x={labelX}
+          y={labelY}
+          text-anchor="start"
+          dominant-baseline="middle"
+          class="majtxt strong"
+          style="font-size:{labelFontSize}px"
+        >
           Aprobación: {maj}
         </text>
       {/if}
@@ -168,7 +195,13 @@
       <button class="ghost" on:click={clearSelection}>Limpiar</button>
       <div class="chips" role="group" aria-label="Partidos">
         {#each parties as p (p.id)}
-          <button class="chip" on:click={() => toggleParty(p.id)} aria-pressed={selectedIds.has(p.id)} style="--c:{p.color}" title={`${p.name} (${p.seats})`}>
+          <button
+            class="chip"
+            on:click={() => toggleParty(p.id)}
+            aria-pressed={selectedIds.has(p.id)}
+            style="--c:{p.color}"
+            title={`${p.name} (${p.seats})`}
+          >
             <span class="dot" style="background:{p.color}"></span>
             <span class="name">{p.name}</span>
             <small>{p.seats}</small>
@@ -179,13 +212,26 @@
   {/if}
 </div>
 
-
 <style>
-  /* === Comunes === */
-  .wrap { display: grid; gap: .6rem; padding: .75rem; }
+  /* ===== Comunes ===== */
+  .wrap { 
+    display: grid; 
+    gap: .6rem; 
+    padding: .75rem; 
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .hdr {
-    display: flex; justify-content: space-between; align-items: center; gap: .5rem;
-    border: 1px solid var(--border); border-radius: .6rem; padding: .4rem .5rem;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    gap: .5rem;
+    border: 1px solid var(--border); 
+    border-radius: .6rem; 
+    padding: .6rem .75rem;
+    width: 100%;
+    box-sizing: border-box;
     transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
   }
   .hdr.reached {
@@ -193,6 +239,7 @@
     border-color: var(--ok);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--ok), #fff 80%) inset;
   }
+
   .ttl {
     margin: 0;
     font-size: .95rem;
@@ -201,15 +248,25 @@
     border-radius: .35rem;
     color: #062c1f;
   }
-  .st { display: flex; gap: .5rem; align-items: center; font-size: .85rem; font-weight: 600; }
+
+  .st { 
+    display: flex; 
+    gap: .5rem; 
+    align-items: center; 
+    font-size: .85rem; 
+    font-weight: 600; 
+  }
 
   .viz {
     background: var(--panel);
     border: 2px solid var(--border);
     border-radius: .75rem;
-    padding: .5rem;
+    padding: .6rem .75rem;
+    width: 100%;
+    box-sizing: border-box;
     transition: border-color .25s ease, box-shadow .25s ease, background-color .25s ease;
   }
+
   .viz.reached {
     border-color: var(--ok);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok), #fff 80%) inset;
@@ -223,29 +280,38 @@
   .majtxt { fill: var(--text-dim); }
   .strong { font-weight: 700; }
 
-  .ctrls { display: grid; gap: .4rem; }
+  .ctrls { 
+    display: grid; 
+    gap: .4rem; 
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .ghost {
-    background: transparent; border: 1px dashed var(--border);
-    color: inherit; padding: .3rem .5rem; border-radius: .4rem; font-size: .8rem;
+    background: transparent; 
+    border: 1px dashed var(--border);
+    color: inherit; 
+    padding: .3rem .5rem; 
+    border-radius: .4rem; 
+    font-size: .8rem;
     transition: transform .12s ease, border-color .2s ease;
   }
   .ghost:active { transform: scale(0.98); }
 
-  /* === Chips === */
-  .chips { display: grid; gap: .4rem; }
+  /* Chips */
+  .chips { display: grid; gap: .4rem; width: 100%; box-sizing: border-box; }
+
   .chip {
     border: 2px solid var(--border);
     background: var(--bg-soft);
-    padding: .28rem .45rem;
+    padding: .28rem .6rem;
     border-radius: 999px;
-    display: inline-flex;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: .35rem;
     font-size: .8rem;
     white-space: nowrap;
     cursor: pointer;
-    min-width: 0;
-    margin-top: 0;
     outline: none;
     transition:
       box-shadow .15s ease,
@@ -253,6 +319,7 @@
       transform .08s ease,
       margin-top .08s ease;
   }
+
   .chip:hover { transform: translateY(-1px); }
   .chip:active { transform: translateY(0); }
 
@@ -268,15 +335,14 @@
     box-shadow: none;
   }
 
-  .dot { inline-size: .6rem; block-size: .6rem; border-radius: 999px; }
-  .name { overflow: hidden; text-overflow: ellipsis; }
+  .dot { inline-size: .6rem; block-size: .6rem; border-radius: 999px; margin-right: .4rem; }
+  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  small { margin-left: .5rem; font-weight: 600; }
 
-  /* === Escritorio / Tablet === */
+  /* ===== Escritorio/Tablet ===== */
   .wrap.desktop .chips {
     display: grid;
-    grid-template-rows: repeat(2, auto);
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(130px, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: .4rem .5rem;
     overflow: hidden;
     align-content: start;
@@ -289,7 +355,7 @@
     justify-content: center;
   }
 
-  /* === Móvil === */
+  /* ===== Móvil ===== */
   .wrap.mobile { padding: .55rem; gap: .45rem; }
   .wrap.mobile .ttl { font-size: .9rem; }
   .wrap.mobile .viz { padding: .35rem; }
